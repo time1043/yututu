@@ -1,0 +1,59 @@
+server:
+  port: 8011
+  servlet:
+    context-path: /api
+
+spring:
+  # 指定环境
+  profiles:
+    active: local
+  # 应用配置
+  application:
+    name: yututu-backend
+  # 数据库配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3308/yututu
+    username: root
+    password: 123456
+  # 文件上传体积
+  servlet:
+    multipart:
+      max-file-size: 10MB
+
+# mybatis-plus配置 https://baomidou.com/reference/
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 开发阶段打印日志
+  global-config:
+    db-config:
+      logic-delete-field: isDeleted  # 逻辑删除字段
+      logic-delete-value: 1  # 逻辑已删除值 默认1
+      logic-not-delete-value: 0  # 逻辑未删除值 默认0
+
+# 接口文档knife4j
+# http://localhost:8011/api/doc.html 【页面】
+# http://localhost:8011/api/v2/api-docs?group=default 【json】
+knife4j:
+  enable: true
+  openapi:
+    title: 后端接口文档
+    description: 鱼图图后端接口文档
+    concat: oswin902
+    version: v0.0.1
+    group:
+      default:
+        group-name: default
+        api-rule: package
+        api-rule-resources:
+          - com.oswin902.yututubackend.controller  # 扫描的包路径
+
+## 腾讯云对象存储
+#cos:
+#  client:
+#    host: xxx
+#    secretId: xxx
+#    secretKey: xxx
+#    region: xxx
+#    bucket: xxx
