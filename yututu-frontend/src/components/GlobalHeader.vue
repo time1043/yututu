@@ -57,18 +57,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { userLogoutUsingPost } from '@/api/userController'
+import { useLoginUserStore } from '@/stores/useLoginUserStore'
 import {
+  FileImageOutlined,
   HomeOutlined,
+  LinkOutlined,
   LogoutOutlined,
   UserOutlined,
-  UserSwitchOutlined,
-  LinkOutlined,
 } from '@ant-design/icons-vue' // https://antdv.com/components/icon-cn
 import { message, type MenuProps } from 'ant-design-vue'
-import { useLoginUserStore } from '@/stores/useLoginUserStore'
-import { userLogoutUsingPost } from '@/api/userController'
+import { computed, h, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 const current = ref<string[]>(['']) // 高亮显示
 const router = useRouter() // 路由跳转
@@ -77,8 +77,8 @@ const loginUserStore = useLoginUserStore() // 状态管理 当前用户
 // 路由信息 (未经过滤的菜单项)
 const originItems = [
   { key: '/', icon: () => h(HomeOutlined), label: '主页', title: '主页' },
-  { key: '/add_picture', label: '创建图片', title: '创建图片' },
-  { key: '/admin/userManage', icon: h(UserSwitchOutlined), label: '用户管理', title: '用户管理' },
+  { key: '/add_picture', icon: h(FileImageOutlined), label: '创建图片', title: '创建图片' },
+  { key: '/admin/userManage', label: '用户管理', title: '用户管理' },
   { key: '/admin/pictureManage', label: '图片管理', title: '图片管理' },
   { key: '/admin/spaceManage', label: '空间管理', title: '空间管理' },
   { key: '/about', icon: h(LinkOutlined), label: '其他', title: '其他' },
@@ -112,7 +112,7 @@ const items = computed(() => filterMenus(originItems))
  * @param key 菜单项的key
  * @param keyPath 菜单项的key路径
  */
-const doMeanClick = ({ item, key, keyPath }: any) => {
+const doMeanClick = ({ key }: any) => {
   router.push({ path: key })
   //current.value = [key]  // 高亮显示
 }
@@ -124,7 +124,7 @@ const doMeanClick = ({ item, key, keyPath }: any) => {
  * @param from 旧页面
  * @param next 后续处理
  */
-router.afterEach((to, from, next) => {
+router.afterEach((to) => {
   current.value = [to.path] // 高亮显示
 })
 
@@ -141,9 +141,8 @@ const doLogout = async () => {
     loginUserStore.setLoginUser({ userName: '未登录' })
     message.success('退出登录成功')
     await router.push({ path: '/user/login' })
-  } else {
-    message.error('退出登录失败 ' + res.data.message)
-  }
+  } else message.error('退出登录失败 ' + res.data.message)
+
   openLoyout.value = false // flag
 }
 

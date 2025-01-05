@@ -59,7 +59,10 @@ const formState = reactive<API.UserRegisterRequest>({
   checkPassword: '',
 })
 
-// 注册表单提交
+/**
+ * 注册表单提交
+ * @param values
+ */
 const handleSubmit = async (values: any) => {
   // 检验参数 两次密码不一致
   if (values.userPassword !== values.checkPassword) {

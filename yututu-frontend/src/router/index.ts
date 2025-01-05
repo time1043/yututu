@@ -1,20 +1,21 @@
-import { createRouter, createWebHistory } from 'vue-router'
 import ACCESS_ENUM from '@/access/accessEnum'
+import { createRouter, createWebHistory } from 'vue-router'
 // 用户模块
+import UserManagePage from '@/pages/admin/UserManagePage.vue' // 管理
+import UserCenterPage from '@/pages/user/UserCenterPage.vue'
 import UserLoginPage from '@/pages/user/UserLoginPage.vue'
 import UserRegisterPage from '@/pages/user/UserRegisterPage.vue'
-import UserCenterPage from '@/pages/user/UserCenterPage.vue'
-import UserManagePage from '@/pages/admin/UserManagePage.vue' // 管理
 // 图片模块
+import PictureManagePage from '@/pages/admin/PictureManagePage.vue' // 管理
+import AddPictureBatchPage from '@/pages/picture/AddPictureBatchPage.vue'
 import AddPicturePage from '@/pages/picture/AddPicturePage.vue'
 import PictureDetailPage from '@/pages/picture/PictureDetailPage.vue'
-import AddPictureBatchPage from '@/pages/picture/AddPictureBatchPage.vue'
-import PictureManagePage from '@/pages/admin/PictureManagePage.vue' // 管理
 // 其他模块
 import HomePage from '@/pages/HomePage.vue'
-import Error403Page from '@/pages/error/403.vue'
-import Error404Page from '@/pages/error/404.vue'
-import Error500Page from '@/pages/error/500.vue'
+import Error401Page from '@/pages/error/Errror401Page.vue'
+import Error403Page from '@/pages/error/Errror403Page.vue'
+import Error404Page from '@/pages/error/Errror404Page.vue'
+import Error500Page from '@/pages/error/Errror500Page.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -61,7 +62,7 @@ const router = createRouter({
       component: AddPictureBatchPage,
     },
     {
-      path: '/picture/:id',
+      path: '/picture/:id', // 动态路由
       name: '图片详情',
       component: PictureDetailPage,
       props: true,
@@ -70,6 +71,11 @@ const router = createRouter({
       path: '/about',
       name: '关于',
       component: () => import('../pages/AboutPage.vue'), // lazy-loaded
+    },
+    {
+      path: '/error/401',
+      name: '未登录',
+      component: Error401Page,
     },
     {
       path: '/error/403',

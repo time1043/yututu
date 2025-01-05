@@ -70,12 +70,20 @@
           </div>
         </template>
 
+        <template v-else-if="column.dataIndex === 'userProfile'">
+          {{
+            record.userProfile.length > 128
+              ? record.userProfile.slice(0, 128) + '...'
+              : record.userProfile
+          }}
+        </template>
+
         <template v-else-if="column.dataIndex === 'createTime'">
           {{ dayjs(record.createTime).format('YYYY-MM-DD HH:mm:ss') }}
         </template>
 
         <!-- 编辑的内容回显 -->
-        <template v-if="['userName', 'userProfile'].includes(column.dataIndex)">
+        <template v-if="['userName'].includes(column.dataIndex)">
           <div>
             <a-input
               v-if="editableData[record.id]"
@@ -124,16 +132,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import type { UnwrapRef } from 'vue'
-import { cloneDeep } from 'lodash-es' // npm i --save-dev @types/lodash-es
-import { message } from 'ant-design-vue'
-import dayjs from 'dayjs'
 import {
   deleteUserUsingPost,
   listUserVoByPageUsingPost,
   updateUserUsingPost,
 } from '@/api/userController'
+import { message } from 'ant-design-vue'
+import dayjs from 'dayjs'
+import { cloneDeep } from 'lodash-es' // npm i --save-dev @types/lodash-es
+import type { UnwrapRef } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
 // 页面加载时获取数据，请求一次
 onMounted(() => {
@@ -146,7 +154,6 @@ const columns = [
     title: 'id',
     dataIndex: 'id', // dataIndex 后端对应
     width: 90, // 宽度
-    // ellipsis: true, // 显示省略号
     sorter: {
       compare: (a: any, b: any) => a.id - b.id,
       multiple: 3, // 数值越大 优先级越高
@@ -176,7 +183,8 @@ const columns = [
   {
     title: '简介',
     dataIndex: 'userProfile',
-    ellipsis: true, // 显示省略号
+    width: 285,
+    // ellipsis: true, // 显示省略号
   },
   {
     title: '用户角色',
@@ -204,6 +212,8 @@ const columns = [
   {
     title: '操作',
     key: 'action', // key 操作空间自定义
+    width: 167,
+    // fixed: 'right',
   },
 ]
 

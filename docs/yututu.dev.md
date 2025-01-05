@@ -728,7 +728,23 @@
 
 - mysql8
 
-  ```
+  ```bash
+  # win11 
+  cd /d/module/container
+  mkdir -p mysql/data mysql/conf mysql/init
+  
+  docker pull mysql:8.0-debian
+  docker run -d \
+    --name mysql \
+    -p 3308:3306 \
+    -e TZ=Asia/Shanghai \
+    -e MYSQL_ROOT_PASSWORD=123456 \
+    -v /d/module/container/mysql/data:/var/lib/mysql \
+    -v /d/module/container/mysql/conf:/etc/mysql/conf.d \
+    -v /d/module/container/mysql/init:/docker-entrypoint-initdb.d \
+    mysql:8.0-debian
+  
+  
   # docker mysql8
   mkdir -p /opt/data/mysql/data /opt/data/mysql/conf /opt/data/mysql/init  # rz -E
   
@@ -744,6 +760,49 @@
   
   docker exec -it mysql bash
   mysql -uroot -p123456
+  
+  
+  # docker redis
+  docker pull redis:7.2.4
+  
+  cd /d/module/container
+  mkdir redis && cd redis && wget http://download.redis.io/redis-stable/redis.conf
+  
+  ---
+  
+  # bind 127.0.0.1 # 注释掉这部分，这是限制redis只能本地访问
+  # bind 127.0.0.1 -::1
+  
+  protected-mode yes # 默认 yes，开启保护模式，限制为本地访问
+  
+  daemonize no # 默认no，改为yes意为以守护进程方式启动，可后台运行，除非kill进程，改为yes会使配置文件方式启动redis失败
+  # daemonize no # 【强制建议】 将 daemonize yes 注释起来或 daemonize no设置，因为该配置和docker run中 -d 参数冲突，会导致容器一直启动失败
+  
+  databases 16 # 数据库个数（可选）
+  
+  dir  ./ # 输入本地redis数据库存放文件夹，默认即 ./（可选）
+  
+  appendonly yes # redis持久化，默认：no（可选）
+  
+  logfile "redis.log" # 日志文件，默认 ""。 "redis.log" 对应的物理存储目录: /data/redis/data/redis.log | Specify the log file name. Also the empty string can be used to force . Redis to log on the standard output. Note that if you use standard output for logging but daemonize, logs will be sent to /dev/null
+  
+  requirepass 123456 # 设置成你自己的密码。默认配置如下：
+  # requirepass foobared
+  
+  ---
+  
+  docker run \
+    --restart always \
+    -p 16379:6379 --name redis \
+    --privileged=true \
+    -v /d/module/container/redis/redis.conf:/etc/redis/redis.conf \
+    -v /d/module/container/redis/data:/data:rw \
+    -d redis:7.2.4 redis-server /etc/redis/redis.conf \
+    --appendonly yes
+  
+  
+  docker run --name myredis -it -p 6379:6379 -v /data/redis-data redis --requirepass "123456"
+  
   
   ```
   
@@ -2034,7 +2093,24 @@
 
 ### 页面 错误
 
-- src\pages\error\403.vue
+- src\pages\error\Errror401Page.vue
+
+  ```vue
+  <template>
+    <a-result status="401" title="401" sub-title="未登录, 请登录后操作">
+      <template #extra>
+        <a-button type="primary" href="/user/login">去登录</a-button>
+      </template>
+    </a-result>
+  </template>
+  
+  <script setup lang="ts"></script>
+  
+  <style scoped></style>
+  
+  ```
+
+  src\pages\error\Errror403Page.vue
 
   ```vue
   <template>
@@ -2051,7 +2127,7 @@
   
   ```
 
-  src\pages\error\404.vue
+  src\pages\error\Errror404Page.vue
 
   ```vue
   <template>
@@ -2068,8 +2144,8 @@
   
   ```
 
-  src\pages\error\500.vue
-
+  src\pages\error\Errror500Page.vue
+  
   ```vue
   <template>
     <a-result status="404" title="404" sub-title="Sorry, the page you visited does not exist.">
@@ -2084,7 +2160,7 @@
   <style scoped></style>
   
   ```
-
+  
   
 
 
@@ -6529,33 +6605,1043 @@
 
 ## 前端页面 图片模块
 
-### 页面 图片创建页
+### 页面 图片创建/修改
 
+- src\pages\picture\AddPicturePage.vue
 
+  ```vue
+  <template>
+    <div id="addPicturePage">
+      <!-- 标题 -->
+      <h2 style="margin-bottom: 16px">{{ route.query?.id ? '修改图片' : '创建图片' }}</h2>
+  
+      <!-- 图片上传组件 -->
+      <pictureUpload :picture="picture" :onSuccess="onSuccess" />
+  
+      <!-- 图片信息表单 https://antdv.com/components/form-cn/ -->
+      <a-form
+        v-if="picture"
+        name="basic"
+        layout="vertical"
+        :model="pictureForm"
+        @finish="handleSubmit"
+      >
+        <a-form-item name="name" label="图片名称">
+          <a-input v-model:value="pictureForm.name" placeholder="输入图片名称" allow-clear />
+        </a-form-item>
+  
+        <a-form-item name="introduction" label="图片简介">
+          <a-textarea
+            v-model:value="pictureForm.introduction"
+            placeholder="输入图片简介"
+            allow-clear
+            :autoSize="{ minRows: 7, maxRows: 7 }"
+          />
+        </a-form-item>
+  
+        <a-form-item name="category" label="图片分类">
+          <a-auto-complete
+            v-model:value="pictureForm.category"
+            placeholder="输入图片分类"
+            allow-clear
+            :options="categoryOptions"
+          />
+        </a-form-item>
+  
+        <a-form-item name="tags" label="图片标签">
+          <a-select
+            v-model:value="pictureForm.tags"
+            mode="tags"
+            placeholder="输入图片标签"
+            allow-clear
+            :options="tagOptions"
+          />
+        </a-form-item>
+  
+        <a-form-item>
+          <a-button type="primary" html-type="submit" style="width: 100%">提交</a-button>
+        </a-form-item>
+      </a-form>
+    </div>
+  </template>
+  
+  <script setup lang="ts">
+  import {
+    editPictureUsingPost,
+    getPictureVoByIdUsingGet,
+    listPictureTagCategoryUsingGet,
+  } from '@/api/pictureController'
+  import PictureUpload from '@/components/PictureUpload.vue'
+  import { message } from 'ant-design-vue'
+  import { onMounted, reactive, ref } from 'vue'
+  import { useRoute, useRouter } from 'vue-router'
+  
+  const router = useRouter() // 路由跳转
+  const route = useRoute() // 获取信息
+  
+  // 前端数据
+  const picture = ref<API.PictureVO>()
+  const pictureForm = reactive<API.PictureEditRequest>({})
+  
+  // 后端数据回显前端
+  const categoryOptions = ref<string[]>([])
+  const tagOptions = ref<string[]>([])
+  
+  // 首次进入页面加载
+  onMounted(() => {
+    getTagCategoryOpeions()
+    getOldPicture()
+  })
+  
+  /**
+   * 图片上传成功回调
+   * @param newPicture
+   */
+  const onSuccess = (newPicture: API.PictureVO) => {
+    picture.value = newPicture
+    pictureForm.name = newPicture.name
+  }
+  
+  /**
+   * 图片修改表单提交
+   * @param values
+   */
+  const handleSubmit = async (values: any) => {
+    // 获取图片id
+    const pictureId = picture.value?.id
+    if (!pictureId) return
+  
+    const res = await editPictureUsingPost({ id: pictureId, ...values }) // 后端接口
+  
+    // 操作成功
+    if (res.data.code === 0 && res.data.data) {
+      message.success('修改成功')
+      router.push({ path: `/picture/${pictureId}`, replace: true }) // 跳转到图片详情页
+    } else message.error('修改失败 ' + res.data.message)
+  }
+  
+  /**
+   * 获取图片分类标签 (后端回显前端)
+   */
+  const getTagCategoryOpeions = async () => {
+    const res = await listPictureTagCategoryUsingGet()
+    if (res.data.code === 0 && res.data.data) {
+      // 数据格式有要求 https://antdv.com/components/select-cn/
+      tagOptions.value = (res.data.data.tagList ?? []).map((data: string) => {
+        return { value: data, label: data }
+      })
+      categoryOptions.value = (res.data.data.categoryList ?? []).map((data: string) => {
+        return { value: data, label: data }
+      })
+    } else message.error('获取图片分类标签失败 ' + res.data.message)
+  }
+  
+  /**
+   * 获取老数据 【新增页面 修改页面 复用】
+   */
+  const getOldPicture = async () => {
+    const pictureId = route.query.id // http://localhost:5011/add_picture?id=1873651749226729473
+    if (!pictureId) return
+    const res = await getPictureVoByIdUsingGet({ id: pictureId })
+    if (res.data.code === 0 && res.data.data) {
+      picture.value = res.data.data
+      pictureForm.name = res.data.data.name
+      pictureForm.introduction = res.data.data.introduction
+      pictureForm.category = res.data.data.category
+      pictureForm.tags = res.data.data.tags
+    } else {
+    }
+  }
+  </script>
+  
+  <style scoped>
+  #addPicturePage {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  </style>
+  
+  ```
+
+  
 
 
 
 ### 组件 图片上传
 
+- src\components\PictureUpload.vue
+
+  ```vue
+  <template>
+    <!-- https://antdv.com/components/upload-cn/ -->
+    <div id="pictureUpload">
+      <a-upload
+        list-type="picture-card"
+        class="avatar-uploader"
+        :show-upload-list="false"
+        :custom-request="handleUpload"
+        :before-upload="beforeUpload"
+      >
+        <img v-if="picture?.url" :src="picture?.url" alt="avatar" />
+        <div v-else>
+          <loading-outlined v-if="loading"></loading-outlined>
+          <plus-outlined v-else></plus-outlined>
+          <div class="ant-upload-text">点击或拖拽</div>
+        </div>
+      </a-upload>
+    </div>
+  </template>
+  
+  <script lang="ts" setup>
+  import { uploadPictureUsingPost } from '@/api/pictureController'
+  import { LoadingOutlined, PlusOutlined } from '@ant-design/icons-vue'
+  import type { UploadProps } from 'ant-design-vue'
+  import { message } from 'ant-design-vue'
+  import { ref } from 'vue'
+  
+  // 父子通信
+  interface Props {
+    picture?: API.PictureVO
+    onSuccess: (picture: API.PictureVO) => void
+  }
+  const props = defineProps<Props>()
+  
+  const loading = ref<boolean>(false)
+  
+  /**
+   * 文件上传前的校验 (前端校验降低后端服务器的压力)
+   * @param file
+   */
+  const beforeUpload = (file: UploadProps['fileList'][number]) => {
+    // 图片格式
+    const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png'
+    if (!isJpgOrPng) message.error('不支持该格式的文件, 只能上传JPG/PNG文件!')
+  
+    // 图片大小
+    const isLt2M = file.size / 1024 / 1024 < 2
+    if (!isLt2M) message.error('图片大小不能超过2MB!')
+  
+    return isJpgOrPng && isLt2M
+  }
+  
+  /**
+   * 上传图片 调用后端接口
+   * @param file 上传的文件
+   */
+  const handleUpload = async ({ file }: any) => {
+    loading.value = true // 开启loading
+  
+    try {
+      const params = props.picture ? { id: props.picture.id } : {}
+      const res = await uploadPictureUsingPost(params, {}, file) // 后端接口
+      if (res.data.code === 0 && res.data.data) {
+        message.success('上传成功')
+        props.onSuccess?.(res.data.data) // 将上传成功的信息传给父组件
+      } else message.error('上传失败 ' + res.data.message)
+    } catch (error) {
+      console.log('图片上传失败 ', error)
+      message.error('图片上传失败 ', error.message)
+    }
+  
+    loading.value = false // 上传成功后关闭loading
+  }
+  </script>
+  
+  <style scoped>
+  #pictureUpload :deep(.ant-upload) {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 152px;
+    min-height: 152px;
+  }
+  
+  #pictureUpload img {
+    max-width: 100%;
+    max-height: 480px;
+  }
+  
+  .ant-upload-select-picture-card i {
+    font-size: 32px;
+    color: #999;
+  }
+  
+  .ant-upload-select-picture-card .ant-upload-text {
+    margin-top: 8px;
+    color: #666;
+  }
+  </style>
+  
+  ```
+
+  
+
+
+
+### 页面 图片管理
+
+- src\pages\admin\PictureManagePage.vue
+
+  表格的列定义
+
+  ```vue
+  <template>
+    <div id="pictureManagePage">
+      <!-- 上方 表单搜索栏 https://antdv.com/components/form-cn/ -->
+      <a-form layout="inline" :model="searchParams" @finish="doSearch">
+        <a-form-item>
+          <a-input v-model:value="searchParams.id" placeholder="输入图片ID" allow-clear />
+        </a-form-item>
+  
+        <a-form-item>
+          <a-input v-model:value="searchParams.userId" placeholder="输入用户ID" allow-clear />
+        </a-form-item>
+  
+        <a-form-item>
+          <a-input
+            v-model:value="searchParams.searchText"
+            placeholder="从名称和简介搜索"
+            allow-clear
+          />
+        </a-form-item>
+  
+        <a-form-item>
+          <a-select
+            v-model:value="searchParams.category"
+            placeholder="选择分类"
+            :options="categoryOptions"
+            style="min-width: 197.43px"
+            allow-clear
+          />
+        </a-form-item>
+  
+        <a-form-item>
+          <a-select
+            v-model:value="searchParams.tags"
+            mode="tags"
+            placeholder="输入标签"
+            :options="tagOptions"
+            style="min-width: 197.43px"
+            allow-clear
+          />
+        </a-form-item>
+  
+        <a-form-item>
+          <a-button type="primary" html-type="submit">搜索</a-button>
+        </a-form-item>
+        <a-form-item>
+          <a-button type="primary" ghost @click="doReset">重置</a-button>
+        </a-form-item>
+        <a-form-item>
+          <a-button danger type="primary" @click="doReset">删除</a-button>
+        </a-form-item>
+      </a-form>
+      <div style="margin-bottom: 16px" />
+  
+      <!-- 下方 表格(支持分页) https://antdv.com/components/table-cn/ -->
+      <!-- :scroll="{ x: '0', y: '700px' }" -->
+      <a-table
+        :columns="columns"
+        :data-source="dataList"
+        :pagination="pagination"
+        @change="doTableChange"
+        :scroll="{ x: 1500 }"
+      >
+        <!-- 表格体 插槽 -->
+        <template #bodyCell="{ column, text, record }">
+          <template v-if="column.dataIndex === 'url'">
+            <a-image :src="record.url" :width="120" />
+          </template>
+  
+          <template v-else-if="column.dataIndex === 'id'">
+            <a-typography-paragraph :copyable="{ tooltip: false }">
+              {{ record.id }}
+            </a-typography-paragraph>
+          </template>
+  
+          <template v-else-if="column.dataIndex === 'userId'">
+            <a-typography-paragraph :copyable="{ tooltip: false }">
+              {{ record.userId }}
+            </a-typography-paragraph>
+          </template>
+  
+          <template v-else-if="column.dataIndex === 'name'">
+            {{ record.name.length > 40 ? record.name.slice(0, 40) + '...' : record.name }}
+          </template>
+  
+          <template v-else-if="column.dataIndex === 'category'">
+            <a-tag color="green">{{ record.category }}</a-tag>
+          </template>
+  
+          <template v-else-if="column.dataIndex === 'tags'">
+            <!-- <a-tag color="blue">{{ record.tags }}</a-tag> -->
+            <!-- <a-space wrap> </a-space> -->
+            <div v-if="record.tags === '[]'"></div>
+            <a-tag
+              v-for="tag in JSON.parse(record.tags || '[]')"
+              color="blue"
+              :key="tag"
+              style="margin-top: 7px"
+            >
+              {{ tag }}
+            </a-tag>
+          </template>
+  
+          <template v-else-if="column.dataIndex === 'createTime'">
+            {{ dayjs(record.createTime).format('YYYY-MM-DD HH:mm:ss') }}
+          </template>
+  
+          <template v-else-if="column.dataIndex === 'picInfo'">
+            <div>格式：{{ record.picFormat }}</div>
+            <div>宽度：{{ record.picWidth }}</div>
+            <div>高度：{{ record.picHeight }}</div>
+            <div>宽高比：{{ record.picScale }}</div>
+            <div>大小：{{ (record.picSize / 1024).toFixed(2) }}KB</div>
+          </template>
+  
+          <template v-else-if="column.dataIndex === 'editTime'">
+            {{ dayjs(record.editTime).format('YYYY-MM-DD HH:mm:ss') }}
+          </template>
+  
+          <template v-else-if="column.key === 'action'">
+            <!-- <a-button danger @click="doDelete(record.id)"> 删除 </a-button> -->
+            <a-button danger>
+              <a-popconfirm v-if="dataList.length" title="确定删除?" @confirm="doDelete(record.id)">
+                <a> 删除 </a>
+              </a-popconfirm>
+            </a-button>
+  
+            <a-button primary>
+              <a :href="`/add_picture?id=${record.id}`" target="_blank">编辑</a>
+            </a-button>
+          </template>
+        </template>
+      </a-table>
+    </div>
+  </template>
+  
+  <script setup lang="ts">
+  import {
+    deletePictureUsingPost,
+    listPictureByPageUsingPost,
+    listPictureTagCategoryUsingGet,
+  } from '@/api/pictureController'
+  import { message } from 'ant-design-vue'
+  import dayjs from 'dayjs'
+  import { computed, onMounted, reactive, ref } from 'vue'
+  
+  // 页面加载时获取数据，请求一次
+  onMounted(() => {
+    fetchData()
+    getTagCategoryOpeions()
+  })
+  
+  // 定义列名
+  const columns = [
+    {
+      title: 'id',
+      dataIndex: 'id',
+      width: 90,
+    },
+    {
+      title: '图片',
+      dataIndex: 'url',
+      width: 153,
+    },
+    {
+      title: '名称',
+      dataIndex: 'name',
+      width: 160,
+    },
+    {
+      title: '简介',
+      dataIndex: 'introduction',
+      width: 285,
+      // ellipsis: true,
+    },
+    {
+      title: '类型',
+      dataIndex: 'category',
+    },
+    {
+      title: '标签',
+      dataIndex: 'tags',
+    },
+    {
+      title: '图片信息',
+      dataIndex: 'picInfo',
+      width: 135,
+    },
+    {
+      title: '用户 id',
+      dataIndex: 'userId',
+      width: 90,
+    },
+    // {
+    //   title: '空间 id',
+    //   dataIndex: 'spaceId',
+    //   width: 80,
+    // },
+    {
+      title: '审核信息',
+      dataIndex: 'reviewMessage',
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'createTime',
+    },
+    {
+      title: '编辑时间',
+      dataIndex: 'editTime',
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 167,
+      // fixed: 'right',
+    },
+  ]
+  
+  // 后端数据回显前端
+  const categoryOptions = ref<string[]>([])
+  const tagOptions = ref<string[]>([])
+  
+  // 定义数据
+  // ref 响应式变量 数组整体变化才会触发重新渲染
+  const dataList = ref<API.Picture[]>([])
+  const total = ref<number>(0)
+  
+  // 搜索条件
+  // reactive 响应式变量 对象中任何一个属性发生变化都会触发重新渲染
+  const searchParams = reactive<API.PictureQueryRequest>({
+    current: 1,
+    pageSize: 10,
+    sortField: 'createTime',
+    sortOrder: 'deascend',
+    id: undefined,
+    userId: undefined,
+    searchText: undefined,
+    tags: [],
+    category: undefined,
+  })
+  
+  // 分页参数
+  const pagination = computed(() => {
+    return {
+      current: searchParams.current,
+      pageSize: searchParams.pageSize,
+      total: total.value,
+      showSizeChanger: true,
+      showTotal: (total: number) => `共 ${total} 条`,
+    }
+  })
+  
+  /**
+   * 获取数据
+   */
+  const fetchData = async () => {
+    const res = await listPictureByPageUsingPost({ ...searchParams }) // 后端接口
+    if (res.data.code === 0 && res.data.data) {
+      dataList.value = res.data.data.records ?? []
+      total.value = Number(res.data.data.total) ?? 0
+    } else message.error('获取数据失败 ' + res.data.message)
+  }
+  
+  /**
+   * 表格变化之后 重新获取数据
+   * @param page 分页参数
+   */
+  const doTableChange = (page: any) => {
+    searchParams.current = page.current
+    searchParams.pageSize = page.pageSize
+    fetchData()
+  }
+  
+  /**
+   * 搜索数据
+   */
+  const doSearch = () => {
+    searchParams.current = 1 // 重置页码
+    fetchData()
+  }
+  
+  /**
+   * 重置搜索条件
+   */
+  const doReset = () => {
+    searchParams.searchText = undefined
+    searchParams.name = undefined
+    searchParams.id = undefined
+    searchParams.userId = undefined
+    searchParams.tags = []
+    searchParams.category = undefined
+    doSearch()
+  }
+  
+  /**
+   * 删除图片 (admin)
+   * @param id 要删除的图片id
+   */
+  const doDelete = async (id: number) => {
+    if (!id) return
+    const res = await deletePictureUsingPost({ id }) // 后端接口
+    if (res.data.code === 0) {
+      // openDoDelete.value = false
+      message.success('删除成功')
+      fetchData() // 刷新数据
+    } else message.error('删除失败 ' + res.data.message)
+  }
+  
+  /**
+   * 获取图片分类标签 (后端回显前端)
+   */
+  const getTagCategoryOpeions = async () => {
+    const res = await listPictureTagCategoryUsingGet() // 后端接口
+    if (res.data.code === 0 && res.data.data) {
+      // 数据格式有要求 https://antdv.com/components/select-cn/
+      tagOptions.value = (res.data.data.tagList ?? []).map((data: string) => {
+        return { value: data, label: data }
+      })
+      categoryOptions.value = (res.data.data.categoryList ?? []).map((data: string) => {
+        return { value: data, label: data }
+      })
+    } else message.error('获取图片分类标签失败 ' + res.data.message)
+  }
+  </script>
+  
+  <style scoped>
+  /* 选择标签 <a-form-item> */
+  .ant-form-item {
+    margin-top: 10px;
+    margin-bottom: 10px;
+  }
+  
+  .ant-table-cell button {
+    margin-right: 8px;
+    margin-top: 5px;
+  }
+  </style>
+  
+  ```
+  
+  
+
+
+
+### 页面 图片详情 
+
+- src\pages\picture\PictureDetailPage.vue
+
+  ```vue
+  <template>
+    <div id="pictureDetailPage">
+      <!-- 图片详情：栅格布局 一行两列 https://antdv.com/components/grid-cn/ -->
+      <a-row :gutter="[16, 16]">
+        <!-- 图片预览 -->
+        <a-col :sm="24" :md="16" :xl="18">
+          <a-card title="图片预览">
+            <a-image :src="picture.url" style="max-height: 600; object-fit: contain" />
+          </a-card>
+        </a-col>
+        <!-- 图片信息 -->
+        <a-col :sm="24" :md="8" :xl="6">
+          <a-card title="图片信息">
+            <a-descriptions :column="1">
+              <a-descriptions-item label="作者">
+                <a-space>
+                  <a-avatar :size="24" :src="picture.user?.userAvatar" />
+                  <div>{{ picture.user?.userName }}</div>
+                </a-space>
+              </a-descriptions-item>
+  
+              <a-descriptions-item label="名称">
+                {{ picture.name ?? '未命名' }}
+              </a-descriptions-item>
+  
+              <a-descriptions-item label="简介">
+                {{ picture.introduction ?? '-' }}
+              </a-descriptions-item>
+  
+              <a-descriptions-item label="分类">
+                <a-tag color="green">{{ picture.category ?? '默认' }}</a-tag>
+              </a-descriptions-item>
+  
+              <a-descriptions-item label="标签">
+                <a-tag color="blue" v-for="tag in picture.tags" :key="tag">
+                  {{ tag }}
+                </a-tag>
+              </a-descriptions-item>
+  
+              <a-descriptions-item label="格式">
+                {{ picture.picFormat ?? '-' }}
+              </a-descriptions-item>
+  
+              <a-descriptions-item label="宽度">
+                {{ picture.picWidth ?? '-' }}
+              </a-descriptions-item>
+  
+              <a-descriptions-item label="高度">
+                {{ picture.picHeight ?? '-' }}
+              </a-descriptions-item>
+  
+              <a-descriptions-item label="宽高比">
+                {{ picture.picScale ?? '-' }}
+              </a-descriptions-item>
+  
+              <a-descriptions-item label="大小">
+                {{ formatSize(picture.picSize) }}
+              </a-descriptions-item>
+            </a-descriptions>
+  
+            <!-- 操作按钮 -->
+            <a-space wrap>
+              <a-button danger :icon="h(DeleteOutlined)" v-if="canEdit">
+                <a-popconfirm v-if="picture" title="确定删除?" @confirm="doDelete(picture.id)">
+                  <a> 删除 </a>
+                </a-popconfirm>
+              </a-button>
+  
+              <a-button primary :icon="h(EditOutlined)" v-if="canEdit">
+                <a :href="`/add_picture?id=${picture.id}`" target="_blank">编辑</a>
+              </a-button>
+            </a-space>
+          </a-card>
+        </a-col>
+      </a-row>
+    </div>
+  </template>
+  
+  <script setup lang="ts">
+  import { deletePictureUsingPost, getPictureVoByIdUsingGet } from '@/api/pictureController'
+  import { useLoginUserStore } from '@/stores/useLoginUserStore'
+  import { formatSize } from '@/utils'
+  import { DeleteOutlined, EditOutlined } from '@ant-design/icons-vue'
+  import { message } from 'ant-design-vue'
+  import { computed, h, onMounted, ref } from 'vue'
+  import { useRoute, useRouter } from 'vue-router'
+  
+  // 当前用户信息
+  const loginUserStore = useLoginUserStore()
+  
+  const router = useRouter() // 路由跳转
+  const route = useRoute() // 获取信息
+  
+  // 首次进入页面加载
+  onMounted(() => {
+    fetchPictureDetail()
+  })
+  
+  // 接受动态路由参数
+  interface Props {
+    id: number | undefined
+  }
+  const props = defineProps<Props>()
+  const picture = ref<API.PictureVO>({})
+  
+  /**
+   * 获取老数据 【新增页面 修改页面 复用】
+   */
+  const fetchPictureDetail = async () => {
+    try {
+      const res = await getPictureVoByIdUsingGet({ id: props.id })
+      if (res.data.code === 0 && res.data.data) {
+        picture.value = res.data.data
+      } else message.error(res.data.message)
+    } catch (e: any) {
+      message.error('获取图片详情失败 ' + e.message)
+    }
+  }
+  
+  /**
+   * 是否具有权限 (否则不显示)
+   */
+  const canEdit = computed(() => {
+    // 未登录无权限操作
+    const loginUser = loginUserStore.loginUser // 当前用户
+    if (!loginUser.id) return false
+    // 只有管理员和作者能操作
+    const pictureUser = picture.value.user || {} // 图片拥有者
+    return loginUser.id === pictureUser.id || loginUser.userRole === 'admin'
+  })
+  
+  /**
+   * 删除图片
+   * @param id 图片id
+   */
+  const doDelete = async (id: number | undefined) => {
+    const res = await deletePictureUsingPost({ id: id })
+    if (res.data.code === 0) {
+      message.success('删除成功')
+      router.push('/')
+    } else message.error(res.data.message)
+  }
+  </script>
+  
+  <style scoped></style>
+  
+  ```
+
+  
 
 
 
 
-### 页面 图片信息修改页
+
+### 页面 主页
+
+- src\pages\HomePage.vue
+
+  ```vue
+  <template>
+    <div id="homePage">
+      <!-- 搜索条 -->
+      <div class="searchBar">
+        <!-- 搜索框 -->
+        <!-- https://antdv.com/components/input-cn/ -->
+        <a-input-search
+          v-model:value="searchParams.searchText"
+          placeholder="请输入搜索关键词"
+          enter-button="搜索"
+          size="large"
+          @search="doSearch"
+        />
+  
+        <!-- 分类和标签筛选 -->
+        <!-- https://antdv.com/components/tabs-cn/ -->
+        <a-tabs v-model:active-key="selectedCategory" @change="doSearch">
+          <a-tab-pane key="all" tab="全部" />
+          <a-tab-pane v-for="category in categoryOptions" :key="category" :tab="category" />
+        </a-tabs>
+        <!-- https://antdv.com/components/tag-cn/ -->
+        <div class="tag-list">
+          <a-space :size="[0, 8]" wrap>
+            <a-checkable-tag
+              v-for="(tag, index) in tagOptions"
+              :key="tag"
+              v-model:checked="selectedTagList[index]"
+              @change="doSearch"
+            >
+              {{ tag }}
+            </a-checkable-tag>
+          </a-space>
+        </div>
+      </div>
+  
+      <!-- 图片列表展示 -->
+      <!-- https://antdv.com/components/list-cn -->
+      <div id="pictureList">
+        <a-list
+          :grid="{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 4, xl: 5, xxl: 6 }"
+          :data-source="dataList"
+          :pagination="pagination"
+          :loading="loading"
+        >
+          <template #renderItem="{ item: picture }">
+            <!-- 单张卡片 https://antdv.com/components/card-cn/ -->
+            <a-list-item style="padding: 0">
+              <a-card hoverable style="width: 260px" @click="doClickPicture(picture)">
+                <template #cover>
+                  <img
+                    :alt="picture.name"
+                    :src="picture.url"
+                    style="height: 180px; object-fit: contain"
+                  />
+                </template>
+                <a-card-meta :title="picture.name">
+                  <template #description>
+                    <a-flex>
+                      <a-tag color="green">{{ picture.category ?? '默认' }}</a-tag>
+                      <a-tag color="blue" v-for="tag in picture.tags" :key="tag">
+                        {{ tag }}
+                      </a-tag>
+                    </a-flex>
+                  </template>
+                </a-card-meta>
+              </a-card>
+            </a-list-item>
+          </template>
+        </a-list>
+      </div>
+    </div>
+  </template>
+  
+  <script lang="ts" setup>
+  import {
+    listPictureTagCategoryUsingGet,
+    listPictureVoByPageUsingPost,
+  } from '@/api/pictureController'
+  import { message } from 'ant-design-vue'
+  import { computed, onMounted, reactive, ref } from 'vue'
+  import { useRouter } from 'vue-router'
+  
+  // 页面加载时获取数据，请求一次
+  onMounted(() => {
+    getTagCategoryOpeions()
+    fetchData()
+  })
+  
+  const router = useRouter()
+  
+  // 后端数据回显前端
+  const categoryOptions = ref<string[]>([])
+  const tagOptions = ref<string[]>([])
+  // 用户选择的
+  const selectedCategory = ref<string>('all')
+  const selectedTagList = ref<boolean[]>([]) // 选中为true
+  
+  // 定义数据
+  // ref 响应式变量 数组整体变化才会触发重新渲染
+  const dataList = ref<API.PictureVO[]>([])
+  const total = ref<number>(0)
+  const loading = ref(true)
+  
+  // 搜索条件
+  // reactive 响应式变量 对象中任何一个属性发生变化都会触发重新渲染
+  const searchParams = reactive<API.PictureQueryRequest>({
+    current: 1,
+    pageSize: 12,
+    sortField: 'createTime',
+    sortOrder: 'deascend',
+    tags: [],
+    category: undefined,
+  })
+  
+  // 分页参数
+  const pagination = computed(() => {
+    return {
+      current: searchParams.current,
+      pageSize: searchParams.pageSize,
+      total: total.value,
+      // showSizeChanger: true,
+      onChange: (page: number, pageSize: number) => {
+        searchParams.current = page
+        searchParams.pageSize = pageSize
+        fetchData()
+      },
+    }
+  })
+  
+  /**
+   * 获取数据
+   */
+  const fetchData = async () => {
+    loading.value = true
+  
+    // 转换搜索参数
+    const params = { ...searchParams, tags: [] as string[] }
+    // 分类参数
+    if (selectedCategory.value !== 'all') params.category = selectedCategory.value
+    // 标签参数 [true, false, true] -> ['java', 'vue']
+    selectedTagList.value.forEach((useTag, index) => {
+      if (useTag) params.tags?.push(tagOptions.value[index])
+    })
+  
+    const res = await listPictureVoByPageUsingPost(params) // 后端接口
+    if (res.data.code === 0 && res.data.data) {
+      dataList.value = res.data.data.records ?? []
+      total.value = Number(res.data.data.total) ?? 0
+    } else message.error('获取数据失败 ' + res.data.message)
+    loading.value = false
+  }
+  
+  /**
+   * 重新搜索
+   */
+  const doSearch = () => {
+    searchParams.current = 1 // 重置页码
+    // searchParams.category = selectedCategory.value
+    // searchParams.tags = selectedTagList.value
+    //   .map((item, index) => (item ? tagOptions.value[index] : ''))
+    //   .filter((item) => item)
+    fetchData()
+  }
+  
+  /**
+   * 获取图片分类标签 (后端回显前端)
+   */
+  const getTagCategoryOpeions = async () => {
+    const res = await listPictureTagCategoryUsingGet()
+    if (res.data.code === 0 && res.data.data) {
+      // 后端回显前端
+      tagOptions.value = res.data.data.tagList ?? []
+      categoryOptions.value = res.data.data.categoryList ?? []
+    } else message.error('获取图片分类标签失败 ' + res.data.message)
+  }
+  
+  /**
+   * 点击图片实现跳转
+   * @param picture 图片
+   */
+  const doClickPicture = (picture: API.PictureVO) => {
+    // window.open(picture.url)
+    router.push({ path: `/picture/${picture.id}` })
+  }
+  </script>
+  
+  <style scoped>
+  #homePage {
+    margin-bottom: 16px;
+  }
+  
+  #homePage .searchBar {
+    max-width: 480px;
+    margin: 0 auto 16px;
+  }
+  
+  #homePage .tar-bar {
+    margin-bottom: 16px;
+  }
+  </style>
+  
+  ```
+
+  
 
 
 
+### 工具类
 
+- src\utils\index.ts
 
-### 页面 图片管理页
+  ```typescript
+  import { saveAs } from 'file-saver' // npm i file-saver  // npm i --save-dev @types/file-saver
+  
+  /**
+   * 格式化文件大小
+   * @param size
+   */
+  export const formatSize = (size?: number) => {
+    if (!size) return '未知'
+    if (size < 1024) return size + ' B'
+    if (size < 1024 * 1024) return (size / 1024).toFixed(2) + ' KB'
+    return (size / (1024 * 1024)).toFixed(2) + ' MB'
+  }
+  
+  /**
+   * 下载图片
+   * @param url 图片下载地址
+   * @param fileName 要保存为的文件名
+   */
+  export function downloadImage(url?: string, fileName?: string) {
+    if (!url) return
+    saveAs(url, fileName)
+  }
+  
+  /**
+   * 将颜色值转换为标准 #RRGGBB 格式
+   * @param input
+   */
+  export function toHexColor(input: string) {
+    // 去掉 0x 前缀
+    const colorValue = input.startsWith('0x') ? input.slice(2) : input
+    // 将剩余部分解析为十六进制数，再转成 6 位十六进制字符串
+    const hexColor = parseInt(colorValue, 16).toString(16).padStart(6, '0')
+    // 返回标准 #RRGGBB 格式
+    return `#${hexColor}`
+  }
+  
+  ```
 
-
-
-
-
-### 页面 图片详情页
-
-
+  
 
 
 

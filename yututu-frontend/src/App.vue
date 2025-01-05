@@ -7,12 +7,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import zhCN from 'ant-design-vue/es/locale/zh_CN'
-import { useLoginUserStore } from '@/stores/useLoginUserStore'
 import BasicLayout from '@/layouts/BasicLayout.vue'
 import ZeroLayout from '@/layouts/ZeroLayout.vue'
+import zhCN from 'ant-design-vue/es/locale/zh_CN'
+import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
 
 // 默认中文
 // https://antdv.com/docs/vue/i18n-cn
@@ -26,7 +25,14 @@ const locale = ref(zhCN)
 const route = useRoute()
 const currentLayout = computed(() => {
   // if (route.path === '/user/login') return ZeroLayout
-  const whiteList = ['/user/login', '/user/register', '/error/403', '/error/404', '/error/500']
+  const whiteList = [
+    '/user/login',
+    '/user/register',
+    '/error/401',
+    '/error/403',
+    '/error/404',
+    '/error/500',
+  ]
   if (whiteList.includes(route.path)) {
     return ZeroLayout
   }
