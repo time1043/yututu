@@ -322,6 +322,20 @@
 
 
 
+#### 图片优化：传图和审核
+
+- 用户传图
+
+- 管理员审核
+
+  审核状态(等待|通过|拒绝)、审核详细
+
+  审核人、审核时间
+
+  
+
+
+
 ## 文档汇总
 
 ### 页面设计 
@@ -5742,6 +5756,55 @@
 
 ## 后端接口 图片管理
 
+### 枚举类 (model.enums)
+
+- src\main\java\com\oswin902\yututubackend\model\enums\PictureReviewStatusEnum.java
+
+  ```java
+  package com.oswin902.yututubackend.model.enums;
+  
+  import cn.hutool.core.util.ObjUtil;
+  import lombok.Getter;
+  
+  /**
+   * 图片审核状态枚举
+   */
+  @Getter
+  public enum PictureReviewStatusEnum {
+      REVIEWING("待审核", 0),
+      PASS("审核通过", 1),
+      REJECT("审核不通过", 2);
+  
+      private final String text;
+      private final int value;
+  
+      PictureReviewStatusEnum(String text, int value) {
+          this.text = text;
+          this.value = value;
+      }
+  
+      /**
+       * 根据值获取枚举
+       *
+       * @param value 值
+       * @return 枚举
+       */
+      public static PictureReviewStatusEnum getEnumByValue(Integer value) {
+          if (ObjUtil.isEmpty(value)) return null;
+          // Map<String, UserRoleEnum> map = new HashMap<>();
+          for (PictureReviewStatusEnum pictureReviewStatusEnum : PictureReviewStatusEnum.values()) {
+              if (pictureReviewStatusEnum.getValue() == value) return pictureReviewStatusEnum;
+          }
+          return null;
+      }
+  }
+  
+  ```
+
+  
+
+
+
 ### 请求封装类 (model.dto)
 
 - src\main\java\com\oswin902\yututubackend\model\dto\picture\PictureUpdateRequest.java 【更新=新增|管理员更新】
@@ -5955,6 +6018,41 @@
        * 结束编辑时间
        */
       private Date endEditTime;
+  
+      private static final long serialVersionUID = 1L;
+  }
+  
+  ```
+
+- src\main\java\com\oswin902\yututubackend\model\dto\picture\PictureReviewRequest.java 【管理员审核】
+
+  ```java
+  package com.oswin902.yututubackend.model.dto.picture;
+  
+  import lombok.Data;
+  
+  import java.io.Serializable;
+  
+  /**
+   * 图片审核请求
+   */
+  @Data
+  public class PictureReviewRequest implements Serializable {
+  
+      /**
+       * id
+       */
+      private Long id;
+  
+      /**
+       * 审核状态：0-待审核; 1-通过; 2-拒绝
+       */
+      private Integer reviewStatus;
+  
+      /**
+       * 审核信息
+       */
+      private String reviewMessage;
   
       private static final long serialVersionUID = 1L;
   }
@@ -7645,6 +7743,9 @@
 
 
 
+## 图片模块优化 
+
+### 用户传图
 
 
 
@@ -7652,8 +7753,17 @@
 
 
 
+### 管理员审核
 
-## 图片模块优化
+
+
+
+
+
+
+### 批量抓图
+
+
 
 
 

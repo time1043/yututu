@@ -4,7 +4,6 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -13,16 +12,16 @@ import com.oswin902.yututubackend.exception.ThrowUtils;
 import com.oswin902.yututubackend.manager.FileManager;
 import com.oswin902.yututubackend.mapper.PictureMapper;
 import com.oswin902.yututubackend.model.dto.file.UploadPictureResult;
-import com.oswin902.yututubackend.model.dto.picture.PictureEditRequest;
 import com.oswin902.yututubackend.model.dto.picture.PictureQueryRequest;
+import com.oswin902.yututubackend.model.dto.picture.PictureReviewRequest;
 import com.oswin902.yututubackend.model.dto.picture.PictureUploadRequest;
 import com.oswin902.yututubackend.model.entity.Picture;
 import com.oswin902.yututubackend.model.entity.User;
+import com.oswin902.yututubackend.model.enums.PictureReviewStatusEnum;
 import com.oswin902.yututubackend.model.vo.PictureVO;
 import com.oswin902.yututubackend.model.vo.UserVO;
 import com.oswin902.yututubackend.service.PictureService;
 import com.oswin902.yututubackend.service.UserService;
-import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -68,8 +67,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Long pictureId = pictureUploadRequest.getId();
         // 若为更新 则判断图片是否存在
         if (pictureId != null) {
-            boolean exists = this.lambdaQuery().eq(Picture::getId, pictureId).exists(); // 数据库操作
-            ThrowUtils.throwIf(!exists, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+            Picture oldPicture = this.getById(pictureId);
+            ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+            //boolean exists = this.lambdaQuery().eq(Picture::getId, pictureId).exists(); // 数据库操作
+            //ThrowUtils.throwIf(!exists, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+
+            // 仅作者或管理员可操作
+            ThrowUtils.throwIf(!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser),
+                    ErrorCode.NO_AUTH_ERROR, "仅支持作者或管理员操作");
         }
 
         // 上传图片
@@ -86,6 +91,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setPicFormat(uploadPictureResult.getPicFormat());
         picture.setUserId(loginUser.getId());
         BeanUtil.copyProperties(pictureUploadRequest, picture);
+        this.fillReviewParams(picture, loginUser);  // 补充审核参数
 
         // 操作数据库
         // 若pictureId不为空 则为更新 更新需要补充id和编辑时间
@@ -212,13 +218,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         String picFormat = pictureQueryRequest.getPicFormat();
         String searchText = pictureQueryRequest.getSearchText();
         Long userId = pictureQueryRequest.getUserId();
-        Integer reviewStatus = pictureQueryRequest.getReviewStatus();
-        String reviewMessage = pictureQueryRequest.getReviewMessage();
-        Long reviewerId = pictureQueryRequest.getReviewerId();
-        Long spaceId = pictureQueryRequest.getSpaceId();
+        Integer reviewStatus = pictureQueryRequest.getReviewStatus();  // 管理员审核
+        String reviewMessage = pictureQueryRequest.getReviewMessage();  // 管理员审核
+        Long reviewerId = pictureQueryRequest.getReviewerId();  // 管理员审核
+        Long spaceId = pictureQueryRequest.getSpaceId();  // 空间
         Date startEditTime = pictureQueryRequest.getStartEditTime();
         Date endEditTime = pictureQueryRequest.getEndEditTime();
-        boolean nullSpaceId = pictureQueryRequest.isNullSpaceId();
+        boolean nullSpaceId = pictureQueryRequest.isNullSpaceId();  // 空间
         String sortField = pictureQueryRequest.getSortField();
         String sortOrder = pictureQueryRequest.getSortOrder();
 
@@ -243,8 +249,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         queryWrapper.eq(ObjUtil.isNotEmpty(picHeight), "picHeight", picHeight);
         queryWrapper.eq(ObjUtil.isNotEmpty(picSize), "picSize", picSize);
         queryWrapper.eq(ObjUtil.isNotEmpty(picScale), "picScale", picScale);
-        queryWrapper.eq(ObjUtil.isNotEmpty(reviewStatus), "reviewStatus", reviewStatus);
-        queryWrapper.eq(ObjUtil.isNotEmpty(reviewerId), "reviewerId", reviewerId);
+        queryWrapper.eq(ObjUtil.isNotEmpty(reviewStatus), "reviewStatus", reviewStatus);  // 管理员审核
+        queryWrapper.eq(ObjUtil.isNotEmpty(reviewerId), "reviewerId", reviewerId);  // 管理员审核
 
         queryWrapper.eq(ObjUtil.isNotEmpty(spaceId), "spaceId", spaceId);
         queryWrapper.isNull(nullSpaceId, "spaceId");
@@ -254,7 +260,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         queryWrapper.like(StrUtil.isNotBlank(name), "name", name);
         queryWrapper.like(StrUtil.isNotBlank(introduction), "introduction", introduction);
         queryWrapper.like(StrUtil.isNotBlank(picFormat), "picFormat", picFormat);
-        queryWrapper.like(StrUtil.isNotBlank(reviewMessage), "reviewMessage", reviewMessage);
+        queryWrapper.like(StrUtil.isNotBlank(reviewMessage), "reviewMessage", reviewMessage);  // 管理员审核
 
         queryWrapper.ge(ObjUtil.isNotEmpty(startEditTime), "editTime", startEditTime);  // >= startEditTime
         queryWrapper.lt(ObjUtil.isNotEmpty(endEditTime), "editTime", endEditTime);  // < endEditTime
@@ -262,5 +268,59 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 排序
         queryWrapper.orderBy(StrUtil.isNotEmpty(sortField), sortOrder.equals("ascend"), sortField);
         return queryWrapper;
+    }
+
+    /**
+     * 图片审核 【admin】
+     *
+     * @param pictureReviewRequest 审核信息
+     * @param loginUser            用户鉴权
+     */
+    @Override
+    public void doPictureReview(PictureReviewRequest pictureReviewRequest, User loginUser) {
+        // 参数校验
+        ThrowUtils.throwIf(pictureReviewRequest == null, ErrorCode.PARAMS_ERROR);
+
+        Long id = pictureReviewRequest.getId();
+        Integer reviewStatus = pictureReviewRequest.getReviewStatus();
+        PictureReviewStatusEnum reviewStatusEnum = PictureReviewStatusEnum.getEnumByValue(reviewStatus);  // 转换成枚举
+        String reviewMessage = pictureReviewRequest.getReviewMessage();
+        ThrowUtils.throwIf(id == null || reviewStatusEnum == null, ErrorCode.PARAMS_ERROR);
+        ThrowUtils.throwIf(PictureReviewStatusEnum.REVIEWING.equals(reviewStatusEnum), ErrorCode.PARAMS_ERROR, "不允许设置为待审核");
+
+        // 判断图片是否存在
+        Picture oldPicture = this.getById(id);
+        ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR, "当前图片不存在");
+
+        // 校验审核状态是否重复
+        ThrowUtils.throwIf(oldPicture.getReviewStatus().equals(reviewStatusEnum), ErrorCode.PARAMS_ERROR, "当前图片状态已审核");
+
+        // 入库
+        Picture updatePicture = new Picture();  // 只更新表单字段
+        BeanUtil.copyProperties(pictureReviewRequest, updatePicture);
+        updatePicture.setReviewerId(loginUser.getId());  // 设置默认值
+        updatePicture.setReviewTime(new Date());  // 设置默认值
+        boolean result = this.updateById(updatePicture);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "数据库异常");
+    }
+
+    /**
+     * 填充审核参数 【工具】
+     *
+     * @param picture   图片
+     * @param loginUser 用户
+     */
+    @Override
+    public void fillReviewParams(Picture picture, User loginUser) {
+        // 管理员自动过审
+        if (userService.isAdmin(loginUser)) {
+            picture.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
+            picture.setReviewerId(loginUser.getId());
+            picture.setReviewMessage("管理员自动过审");
+            picture.setReviewTime(new Date());
+            return;
+        }
+        // 非管理员 无论是编辑还是创建都是待审核
+        picture.setReviewStatus(PictureReviewStatusEnum.REVIEWING.getValue());
     }
 }

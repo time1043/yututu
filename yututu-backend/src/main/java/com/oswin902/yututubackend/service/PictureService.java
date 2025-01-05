@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.oswin902.yututubackend.model.dto.picture.PictureEditRequest;
 import com.oswin902.yututubackend.model.dto.picture.PictureQueryRequest;
+import com.oswin902.yututubackend.model.dto.picture.PictureReviewRequest;
 import com.oswin902.yututubackend.model.dto.picture.PictureUploadRequest;
 import com.oswin902.yututubackend.model.entity.Picture;
 import com.oswin902.yututubackend.model.entity.User;
@@ -62,4 +63,20 @@ public interface PictureService extends IService<Picture> {
      * @return QueryWrapper
      */
     QueryWrapper<Picture> getQueryWrapper(PictureQueryRequest pictureQueryRequest);
+
+    /**
+     * 图片审核 【admin】
+     *
+     * @param pictureReviewRequest 审核信息
+     * @param loginUser            用户鉴权
+     */
+    void doPictureReview(PictureReviewRequest pictureReviewRequest, User loginUser);
+
+    /**
+     * 填充审核参数 【工具】
+     *
+     * @param picture   图片
+     * @param loginUser 用户
+     */
+    void fillReviewParams(Picture picture, User loginUser);
 }

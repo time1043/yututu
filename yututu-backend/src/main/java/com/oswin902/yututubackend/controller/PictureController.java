@@ -9,12 +9,10 @@ import com.oswin902.yututubackend.common.ResultUtils;
 import com.oswin902.yututubackend.constant.UserConstant;
 import com.oswin902.yututubackend.exception.ErrorCode;
 import com.oswin902.yututubackend.exception.ThrowUtils;
-import com.oswin902.yututubackend.model.dto.picture.PictureEditRequest;
-import com.oswin902.yututubackend.model.dto.picture.PictureQueryRequest;
-import com.oswin902.yututubackend.model.dto.picture.PictureUpdateRequest;
-import com.oswin902.yututubackend.model.dto.picture.PictureUploadRequest;
+import com.oswin902.yututubackend.model.dto.picture.*;
 import com.oswin902.yututubackend.model.entity.Picture;
 import com.oswin902.yututubackend.model.entity.User;
+import com.oswin902.yututubackend.model.enums.PictureReviewStatusEnum;
 import com.oswin902.yututubackend.model.vo.PictureTagCategory;
 import com.oswin902.yututubackend.model.vo.PictureVO;
 import com.oswin902.yututubackend.service.PictureService;
@@ -48,7 +46,7 @@ public class PictureController {
      * @return 上传图片结果
      */
     @PostMapping("/upload")
-    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    //@AuthCheck(mustRole = UserConstant.ADMIN_ROLE)  // 开放给用户使用 + 管理员审核
     public BaseResponse<PictureVO> uploadPicture(
             @RequestPart("file") MultipartFile multipartFile,
             PictureUploadRequest pictureUploadRequest,
@@ -116,6 +114,8 @@ public class PictureController {
         long id = pictureUpdateRequest.getId();
         Picture oldPicture = pictureService.getById(id);
         ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        pictureService.fillReviewParams(picture, loginUser);  // 补充审核参数
 
         // 操作数据库
         boolean result = pictureService.updateById(picture);
@@ -182,6 +182,7 @@ public class PictureController {
         long size = pictureQueryRequest.getPageSize();
 
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);  // 限制爬虫
+        pictureQueryRequest.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());  // 普通用户只能看到审核通过的
 
         // 查询数据库
         Page<Picture> picturePage = pictureService.page(new Page<>(current, size),
@@ -215,6 +216,7 @@ public class PictureController {
         User loginUser = userService.getLoginUser(request);
         ThrowUtils.throwIf(!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser),
                 ErrorCode.NO_AUTH_ERROR);  // 仅本人和管理员才能删除图片
+        pictureService.fillReviewParams(picture, loginUser);  // 补充审核参数
 
         // 操作数据库
         boolean result = pictureService.updateById(picture);
@@ -235,5 +237,23 @@ public class PictureController {
         pictureTagCategory.setCategoryList(categoryList);
 
         return ResultUtils.success(pictureTagCategory);
+    }
+
+    /**
+     * 图片审核 【admin】
+     *
+     * @param pictureReviewRequest 待审核图片请求
+     * @param request              http请求
+     * @return 审核结果
+     */
+    @PostMapping("/review")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> doPictureReview(@RequestBody PictureReviewRequest pictureReviewRequest, HttpServletRequest request) {
+
+        ThrowUtils.throwIf(pictureReviewRequest == null, ErrorCode.PARAMS_ERROR);
+
+        User loginUser = userService.getLoginUser(request);  // 获取登录用户
+        pictureService.doPictureReview(pictureReviewRequest, loginUser);
+        return ResultUtils.success(true);
     }
 }
